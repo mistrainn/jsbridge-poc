@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSBridge PoC v5</title>
+    <style>
+        body { font-family: sans-serif; padding: 12px; }
+        button { padding: 8px 14px; margin: 4px; }
+        .pluto { background: #4CAF50; color: white; border: none; }
+        .irs { background: #2196F3; color: white; border: none; }
+        .xfb { background: #FF9800; color: white; border: none; }
+        pre {
+            border: 1px solid #ccc;
+            padding: 8px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 12px;
+        }
+        h4 { margin: 15px 0 8px 0; color: #333; }
+    </style>
+</head>
+<body>
+<h3>JSBridge PoC v5</h3>
+
+<h4>🟢 PLUTO 协议 (jsCallNative)</h4>
+<button class="pluto" onclick="pluto_getUserInfo()">getUserInfo</button>
+
+<h4>🔵 IRS 协议 (ihrbridge://)</h4>
+<button class="irs" onclick="irs_openCamera()">openCamera</button>
+
+<h4>🟠 XFB 协议 (H2C_JSBridge)</h4>
+<button class="xfb" onclick="xfb_getUserInfo()">getUserInfo</button>
+<button class="xfb" onclick="xfb_openCamera()">openCamera</button>
+
+<h4>📋 日志</h4>
+<button onclick="document.getElementById('log').textContent=''">清空</button>
+<button onclick="detectEnv()">检测环境</button>
+<pre id="log"></pre>
+
+<script>
+    var cbId = 0;
+
+    function log(msg) {
+        var el = document.getElementById('log');
+        el.textContent += '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n';
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function getCallbackId() {
+        return 'cb_' + (++cbId) + '_' + Date.now();
+    }
+
+    // ========== 回调函数（使用函数声明，和 poc3 保持一致）==========
+
+    // PLUTO 回调
+    function nativeCallback(data) {
+        log('[PLUTO 回调] ' + data);
+    }
+
+    // XFB 回调 - $C2H_JSBridge
+    function $C2H_JSBridge(data) {
+        log('[XFB 回调] ' + data);
+    }
+
+    // IRS 回调 - IrsJSBridge.handleMessageFormNative
+    var IrsJSBridge = {
+        handleMessageFormNative: function(jsonStr) {
+            log('[IRS 回调] ' + jsonStr);
+        }
+    };
+
+    // ========== 环境检测 ==========
+
+    function detectEnv() {
+        log('===== 环境检测 =====');
+        log('window.Android: ' + (window.Android ? '存在' : '不存在'));
+        if (window.Android) {
+            log('  - jsCallNative: ' + (typeof Android.jsCallNative));
+            log('  - H2C_JSBridge: ' + (typeof Android.H2C_JSBridge));
+        }
+        log('window.WebViewJavascriptBridge: ' + (window.WebViewJavascriptBridge ? '存在' : '不存在'));
+    }
+
+    // ========== PLUTO 协议 (getUserInfo 在这里) ==========
+
+    function pluto_getUserInfo() {
+        log('--- [PLUTO] getUserInfo ---');
+        if (!window.Android || typeof Android.jsCallNative !== 'function') {
+            log('错误: Android.jsCallNative 不存在');
+            return;
+        }
+        var payload = {
+            method: 'getUserInfo',
+            data: {}
+        };
+        Android.jsCallNative(JSON.stringify(payload), 'nativeCallback');
+        log('已调用，等待回调...');
+    }
+
+    // ========== IRS 协议 (openCamera 在这里) ==========
+
+    function irs_openCamera() {
+        log('--- [IRS] openCamera ---');
+        var id = getCallbackId();
+        var params = JSON.stringify({
+            handlerName: 'openCamera',
+            isOpenAlbum: false
+        });
+        var url = 'ihrbridge://' + id + '/openCamera?' + params;
+        log('URL: ' + url);
+
+        // 用 iframe 触发
+        var iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        setTimeout(function() {
+            document.body.removeChild(iframe);
+        }, 100);
+        log('已触发，等待回调...');
+    }
+
+    // ========== XFB 协议 (尝试两个方法) ==========
+
+    function xfb_getUserInfo() {
+        log('--- [XFB] getUserInfo ---');
+        if (!window.Android || typeof Android.H2C_JSBridge !== 'function') {
+            log('错误: Android.H2C_JSBridge 不存在');
+            return;
+        }
+        var id = getCallbackId();
+        var payload = {
+            name: 'getUserInfo',
+            param: '',
+            cbID: id
+        };
+        Android.H2C_JSBridge(JSON.stringify(payload));
+        log('已调用，等待回调...');
+    }
+
+    function xfb_openCamera() {
+        log('--- [XFB] openCamera ---');
+        if (!window.Android || typeof Android.H2C_JSBridge !== 'function') {
+            log('错误: Android.H2C_JSBridge 不存在');
+            return;
+        }
+        var id = getCallbackId();
+        var payload = {
+            name: 'openCamera',
+            param: JSON.stringify({ isOpenAlbum: false }),
+            cbID: id
+        };
+        Android.H2C_JSBridge(JSON.stringify(payload));
+        log('已调用，等待回调...');
+    }
+
+    // ========== 页面加载 ==========
+
+    window.onload = function() {
+        log('页面已加载');
+        log('提示: getUserInfo 用 PLUTO, openCamera 用 IRS');
+        log('');
+        detectEnv();
+    };
+</script>
+</body>
+</html>
