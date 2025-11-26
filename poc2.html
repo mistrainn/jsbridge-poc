@@ -1,133 +1,121 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSBridge 测试工具</title>
+    <title>JSBridge PoC (minimal)</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 600px; }
-        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; }
-        #log { margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; white-space: pre-wrap; font-size: 14px; }
-        .success { color: #4CAF50; }
-        .error { color: #f44336; }
+        body { font-family: sans-serif; padding: 12px; }
+        button { padding: 6px 12px; margin-bottom: 10px; }
+        pre {
+            border: 1px solid #ccc;
+            padding: 8px;
+            min-height: 80px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
     </style>
-    <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
 </head>
 <body>
-    <h1>JSBridge 测试工具</h1>
-    <button onclick="scanAndroid()">扫描 window.Android 方法</button>
-    <button onclick="testBridge()">测试所有 JSBridge 调用</button>
-    <button onclick="clearLog()">清空日志</button>
-    
-    <div id="log">等待操作...</div>
+<h3>JSBridge PoC 测试</h3>
+<button onclick="callGetUserInfo()">调用 getUserInfo (同步)</button>
+<button onclick="callOpenCamera()">调用 openCamera (异步)</button>
+<pre id="log"></pre>
 
-    <script>
-        new VConsole();
+<script>
+    function log(msg) {
+        var el = document.getElementById('log');
+        el.textContent += msg + '\n';
+    }
 
-        const logEl = document.getElementById('log');
-        function log(msg, type = 'info') {
-            const time = new Date().toLocaleTimeString();
-            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
-            logEl.innerHTML += `<div class="${className}">[${time}] ${msg}</div>`;
-            console.log(`[${time}] ${msg}`);
-        }
+    // 通用的回调处理函数
+    function nativeCallback(data) {
+        log('[nativeCallback] 收到数据: ' + data);
+    }
 
-        function clearLog() {
-            logEl.innerHTML = '';
-        }
-
-        // 扫描并列出 window.Android 的所有方法
-        function scanAndroid() {
-            clearLog();
-            log('=== 扫描 window.Android ===');
-            
-            if (!window.Android) {
-                log('❌ window.Android 不存在', 'error');
+    // 调用 getUserInfo
+    function callGetUserInfo() {
+        log('--- 开始调用 getUserInfo ---');
+        try {
+            if (!window.Android || typeof Android.jsCallNative !== 'function') {
+                log('!!! Android.jsCallNative 不存在，当前 window.Android = ' + String(window.Android));
                 return;
             }
 
-            log('✅ 发现 window.Android 对象');
-            log('方法列表:');
-            
-            const methods = [];
-            for (let key in window.Android) {
-                const type = typeof window.Android[key];
-                if (type === 'function') {
-                    methods.push(`  📌 ${key}()`);
-                } else {
-                    methods.push(`  📍 ${key}: ${type}`);
-                }
-            }
-            
-            if (methods.length === 0) {
-                log('  未找到任何方法或属性');
-            } else {
-                methods.forEach(m => log(m));
-            }
-            
-            log(`=== 扫描完成，共找到 ${methods.length} 个方法/属性 ===`);
-        }
+            var payload = {
+                method: 'getUserInfo',
+                data: {}
+            };
 
-        // 测试 JSBridge 调用
-        function testBridge() {
-            clearLog();
-            log('=== 开始测试 JSBridge ===');
-            
-            if (!window.Android) {
-                log('❌ window.Android 不存在', 'error');
+            Android.jsCallNative(JSON.stringify(payload), 'nativeCallback');
+            log('已调用 Android.jsCallNative("getUserInfo", "nativeCallback")，等待回调...');
+        } catch (e) {
+            log('调用异常: ' + e);
+        }
+    }
+
+    // 调用 openCamera
+    function callOpenCamera() {
+        log('--- 开始调用 openCamera ---');
+        log('提示: openCamera 是异步操作，相机被调起后，需要你拍照或取消才会有回调。');
+        try {
+            if (!window.Android || typeof Android.jsCallNative !== 'function') {
+                log('!!! Android.jsCallNative 不存在，当前 window.Android = ' + String(window.Android));
                 return;
             }
 
-            // 测试1: 直接调用
-            log('\n--- 测试1: 直接调用 getUserInfo ---');
-            if (window.Android.getUserInfo) {
-                try {
-                    const result = window.Android.getUserInfo();
-                    log(`🎉 调用成功: ${JSON.stringify(result)}`, 'success');
-                } catch (e) {
-                    log(`❌ 调用失败: ${e.message}`, 'error');
-                }
-            } else {
-                log('⚠️ 方法不存在，跳过');
-            }
+            var payload = {
+                method: 'openCamera',
+                data: {}
+            };
 
-            // 测试2: 统一接口
-            log('\n--- 测试2: 统一接口 call ---');
-            if (window.Android.call) {
-                try {
-                    window.Android.call('getUserInfo', {}, (result) => {
-                        log(`🎉 回调成功: ${JSON.stringify(result)}`, 'success');
-                    });
-                    log('✅ 已发起调用，等待回调...');
-                } catch (e) {
-                    log(`❌ 调用失败: ${e.message}`, 'error');
-                }
-            } else {
-                log('⚠️ 方法不存在，跳过');
-            }
+            Android.jsCallNative(JSON.stringify(payload), 'nativeCallback');
+            log('已调用 Android.jsCallNative("openCamera", "nativeCallback")，等待回调...');
+        } catch (e) {
+            log('调用异常: ' + e);
+        }
+    }
 
-            // 测试3: 其他常见方法
-            const commonMethods = ['getDeviceInfo', 'getToken', 'getLocation', 'scanQRCode'];
-            commonMethods.forEach(method => {
-                if (window.Android[method]) {
-                    log(`\n--- 发现常见方法: ${method} ---`);
+    // 周期性 Hook _handleMessageFromNative，避免被后注入的 JS 覆盖
+    (function setupHookLoop() {
+        function hookOnce() {
+            if (!window.WebViewJavascriptBridge) {
+                return;
+            }
+            var bridge = window.WebViewJavascriptBridge;
+            var old = bridge._handleMessageFromNative;
+
+            if (typeof old === 'function' && !old.__patched) {
+                var wrapped = function(jsonStr) {
+                    log('[HOOK] _handleMessageFromNative 被调用: ' + jsonStr);
                     try {
-                        const result = window.Android[method]();
-                        log(`🎉 ${method} 调用成功: ${JSON.stringify(result)}`, 'success');
+                        var msg = JSON.parse(jsonStr);
+                        if (msg && msg.responseId === 'nativeCallback') {
+                            log('[HOOK] 匹配到 responseId=nativeCallback，转给 nativeCallback');
+                            nativeCallback(msg.responseData);
+                        }
                     } catch (e) {
-                        log(`❌ ${method} 调用失败: ${e.message}`, 'error');
+                        log('[HOOK] 解析 jsonStr 出错: ' + e);
                     }
-                }
-            });
-            
-            log('\n=== 测试完成 ===');
+                    return old.apply(this, arguments);
+                };
+                wrapped.__patched = true;
+                bridge._handleMessageFromNative = wrapped;
+                log('[HOOK] 已挂载 _handleMessageFromNative 拦截器');
+            }
         }
 
-        // 页面加载时自动扫描
-        window.onload = () => {
-            log('页面加载完成，点击按钮开始测试');
-            scanAndroid();
-        };
-    </script>
+        // 尽早、并每 500ms 尝试重新挂一次（防止被重新注入覆盖）
+        hookOnce();
+        setInterval(hookOnce, 500);
+    })();
+
+    // 页面加载完打印当前环境
+    window.onload = function () {
+        log('页面已加载完毕');
+        log('window.Android: ' + String(window.Android));
+        log('window.WebViewJavascriptBridge: ' + String(window.WebViewJavascriptBridge));
+    };
+</script>
 </body>
 </html>
