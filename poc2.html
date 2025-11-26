@@ -3,90 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSBridge Test Page</title>
+    <title>JSBridge 测试工具</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        button { font-size: 16px; padding: 10px; margin: 5px; cursor: pointer; }
-        #status { margin-top: 20px; font-weight: bold; }
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; }
+        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; }
+        #log { margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; white-space: pre-wrap; font-size: 14px; }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
     </style>
     <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
 </head>
 <body>
-    <h1>JSBridge 漏洞测试页面</h1>
-    <p>如果页面下方出现绿色的 vConsole 按钮，说明环境已就绪。</p>
-
-    <button onclick="testDirectCall()">测试直接调用 (e.g., getUserInfo)</button>
-    <button onclick="testUnifiedCall()">测试统一接口调用 (e.g., call)</button>
-    <button onclick="testPlutoGetUserInfo()">测试 Pluto.getUserInfo</button>
-
-    <div id="status">等待操作...</div>
+    <h1>JSBridge 测试工具</h1>
+    <button onclick="scanAndroid()">扫描 window.Android 方法</button>
+    <button onclick="testBridge()">测试所有 JSBridge 调用</button>
+    <button onclick="clearLog()">清空日志</button>
+    
+    <div id="log">等待操作...</div>
 
     <script>
-        // 初始化 vConsole
-        var vConsole = new VConsole();
+        new VConsole();
 
-        const statusDiv = document.getElementById('status');
-
-        // ✅ 修正：只调用 console.log，vConsole会自动拦截
-        function log(msg) {
-            console.log(msg); // vConsole会自动捕获并显示
+        const logEl = document.getElementById('log');
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
+            logEl.innerHTML += `<div class="${className}">[${time}] ${msg}</div>`;
+            console.log(`[${time}] ${msg}`);
         }
 
-        function testDirectCall() {
-            log("--- 尝试直接调用 ---");
-            if (window.Android && window.Android.getUserInfo) {
-                log("✅ 发现 window.Android.getUserInfo");
+        function clearLog() {
+            logEl.innerHTML = '';
+        }
+
+        // 扫描并列出 window.Android 的所有方法
+        function scanAndroid() {
+            clearLog();
+            log('=== 扫描 window.Android ===');
+            
+            if (!window.Android) {
+                log('❌ window.Android 不存在', 'error');
+                return;
+            }
+
+            log('✅ 发现 window.Android 对象');
+            log('方法列表:');
+            
+            const methods = [];
+            for (let key in window.Android) {
+                const type = typeof window.Android[key];
+                if (type === 'function') {
+                    methods.push(`  📌 ${key}()`);
+                } else {
+                    methods.push(`  📍 ${key}: ${type}`);
+                }
+            }
+            
+            if (methods.length === 0) {
+                log('  未找到任何方法或属性');
+            } else {
+                methods.forEach(m => log(m));
+            }
+            
+            log(`=== 扫描完成，共找到 ${methods.length} 个方法/属性 ===`);
+        }
+
+        // 测试 JSBridge 调用
+        function testBridge() {
+            clearLog();
+            log('=== 开始测试 JSBridge ===');
+            
+            if (!window.Android) {
+                log('❌ window.Android 不存在', 'error');
+                return;
+            }
+
+            // 测试1: 直接调用
+            log('\n--- 测试1: 直接调用 getUserInfo ---');
+            if (window.Android.getUserInfo) {
                 try {
                     const result = window.Android.getUserInfo();
-                    log("🎉 调用成功！返回结果: " + JSON.stringify(result));
-                    statusDiv.innerText = "直接调用成功！请查看 vConsole。";
+                    log(`🎉 调用成功: ${JSON.stringify(result)}`, 'success');
                 } catch (e) {
-                    log("❌ 调用失败: " + e);
-                    statusDiv.innerText = "直接调用失败。";
+                    log(`❌ 调用失败: ${e.message}`, 'error');
                 }
             } else {
-                log("❌ 未发现 window.Android.getUserInfo");
-                statusDiv.innerText = "未发现直接调用的方法。";
+                log('⚠️ 方法不存在，跳过');
             }
-        }
 
-        function testUnifiedCall() {
-            log("--- 尝试统一接口调用 ---");
-            if (window.Android && window.Android.call) {
-                log("✅ 发现 window.Android.call");
+            // 测试2: 统一接口
+            log('\n--- 测试2: 统一接口 call ---');
+            if (window.Android.call) {
                 try {
-                    window.Android.call('getUserInfo', {}, function(result) {
-                        log("🎉 调用成功！返回结果: " + JSON.stringify(result));
-                        statusDiv.innerText = "统一接口调用成功！请查看 vConsole。";
+                    window.Android.call('getUserInfo', {}, (result) => {
+                        log(`🎉 回调成功: ${JSON.stringify(result)}`, 'success');
                     });
+                    log('✅ 已发起调用，等待回调...');
                 } catch (e) {
-                    log("❌ 调用失败: " + e);
-                    statusDiv.innerText = "统一接口调用失败。";
+                    log(`❌ 调用失败: ${e.message}`, 'error');
                 }
             } else {
-                log("❌ 未发现 window.Android.call");
-                statusDiv.innerText = "未发现统一接口。";
+                log('⚠️ 方法不存在，跳过');
             }
+
+            // 测试3: 其他常见方法
+            const commonMethods = ['getDeviceInfo', 'getToken', 'getLocation', 'scanQRCode'];
+            commonMethods.forEach(method => {
+                if (window.Android[method]) {
+                    log(`\n--- 发现常见方法: ${method} ---`);
+                    try {
+                        const result = window.Android[method]();
+                        log(`🎉 ${method} 调用成功: ${JSON.stringify(result)}`, 'success');
+                    } catch (e) {
+                        log(`❌ ${method} 调用失败: ${e.message}`, 'error');
+                    }
+                }
+            });
+            
+            log('\n=== 测试完成 ===');
         }
 
-        function testPlutoGetUserInfo() {
-            log("--- 尝试调用 Pluto.getUserInfo ---");
-            if (window.Android && window.Android.Pluto && window.Android.Pluto.getUserInfo) {
-                log("✅ 发现 window.Android.Pluto.getUserInfo");
-                // ... 执行调用
-            } else {
-                log("❌ 未发现 window.Android.Pluto.getUserInfo");
-            }
-        }
-
-        window.onload = function() {
-            log("页面加载完成，开始检查 JSBridge 对象...");
-            if (window.Android) {
-                log("✅ 发现 window.Android 对象！");
-                log("内容: " + JSON.stringify(window.Android, null, 2));
-            } else {
-                log("❌ 未发现 window.Android 对象。此 WebView 可能未注入 JSBridge。");
-            }
+        // 页面加载时自动扫描
+        window.onload = () => {
+            log('页面加载完成，点击按钮开始测试');
+            scanAndroid();
         };
     </script>
 </body>
